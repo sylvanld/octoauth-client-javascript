@@ -1,0 +1,17 @@
+{
+  "name": "octoauth-client",
+  "version": "0.0.1",
+  "description": "Client library for OctoAuth identity server",
+  "main": "src/index.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitlab.com/octoauth/libraries/javascript-client.git"
+  },
+  "author": "Sylvan LE DEUNFF",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://gitlab.com/octoauth/libraries/javascript-client/issues"
+  },
+  "homepage": "https://gitlab.com/octoauth/libraries/javascript-client#readme"
+}
