@@ -10,6 +10,8 @@ npm install --save octoauth-client
 
 ## Usage
 
+Instanciate OctoAuth client.
+
 ```javascript
 import {OctoAuthClient} from 'octoauth-client'
 
@@ -19,7 +21,10 @@ const octo = new OctoAuthClient({
     scopes: ['friends:read', 'friends:edit'], 
     serverURL: 'https://accounts.example.com'
 })
+```
 
+Get token using authorization code flow.
+```javascript
 const authorizationCode = octo.getAuthorizationCode();
 let accessToken = octo.getAccessToken(authorizationCode);
 ```
