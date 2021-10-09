@@ -13,5 +13,8 @@
   "bugs": {
     "url": "https://gitlab.com/octoauth/libraries/javascript-client/issues"
   },
-  "homepage": "https://gitlab.com/octoauth/libraries/javascript-client#readme"
+  "homepage": "https://gitlab.com/octoauth/libraries/javascript-client#readme",
+  "devDependencies": {
+    "eslint": "^7.32.0"
+  }
 }
