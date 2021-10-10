@@ -1,4 +1,5 @@
 import {generateCodeChallenge, generateCodeVerifier, randomString} from './security'
+import {HTTPSession} from './requests'
 
 const CODE_VERIFIER_KEY = "codeVerifier";
 const SAVED_STATE_KEY = "savedState";
@@ -65,17 +66,18 @@ export default class OctoAuthClient{
     }
 
     getTokenFromCode(authorizationCode){
-        const xhr = new XMLHttpRequest();
-        xhr.onreadystatechange = function(){
-            console.log(xhr);
-            if(xhr.readyState === 4 && xhr.status === 200){
-                console.log("succeed");
+        const session = new HTTPSession({baseURL: this.baseURL});
+        session.post({
+            url: "/oauth2/token", 
+            json: {
+                grant_type: "authorization_code",
+                code: authorizationCode,
+                client_id: this.clientId,
+                redirect_uri: this.redirectURI
             }
-        }
-        xhr.open("POST", this.serverURL + "/oauth2/token")
-        xhr.send(JSON.stringify({
-            grant_type: "code",
-            code: authorizationCode
-        }));
+        })
+        .then(response=>{
+            console.log(response.json());
+        });
     }
 }

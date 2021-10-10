@@ -31,6 +31,7 @@ let accessToken = octo.getAccessToken(authorizationCode);
 
 ## Sources
 
+- [proof key for code exchange by oauth public clients (rfc7636)](https://datatracker.ietf.org/doc/html/rfc7636)
 - [generate cryptographically secure random numbers](https://developer.mozilla.org/en-US/docs/Web/API/crypto_property)
 
 ## Roadmap
