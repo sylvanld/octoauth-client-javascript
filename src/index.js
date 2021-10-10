@@ -67,7 +67,7 @@ export default class OctoAuthClient{
 
     async introspectToken(accessToken){
         const session = new HTTPSession({baseURL: this.serverURL});
-        response = await session.get({
+        const response = await session.get({
             url: "/oauth2/token/introspect", 
             headers: {
                 "Authorization": `Bearer ${accessToken}`
@@ -93,7 +93,7 @@ export default class OctoAuthClient{
     async getAccessToken(){
         const authorizationCode = this.getAuthorizationCode();
         const accessToken = await this.getTokenFromCode(authorizationCode);
-        const tokenData = await this.introspectToken(accessToken);
+        await this.introspectToken(accessToken);
         return accessToken;
     }
 }
