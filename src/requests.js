@@ -40,6 +40,7 @@ export class HTTPSession{
         }
         return new Promise(resolve=>{
             const xhr = new XMLHttpRequest();
+            
             if(url.substr(0, 4) != "http" && !!this.baseURL){
                 url = this.baseURL + url;
             }
@@ -47,13 +48,15 @@ export class HTTPSession{
 
             // set request default headers
             for(let header of mergeHeaders(this.headers, headers)){
-                xhr.setRequestHeader(header.header, header.value);
+                xhr.setRequestHeader(header.name, header.value);
             }
 
             // build xhr body
             let body = null;
+            console.log(json, text, data);
             if(json){
-                body = JSON.stringify(body);
+                console.log('json');
+                body = JSON.stringify(json);
                 xhr.setRequestHeader("Content-Type", "application/json");
             }else if(text){
                 body = text;

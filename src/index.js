@@ -65,9 +65,20 @@ export default class OctoAuthClient{
         return params.code;
     }
 
-    getTokenFromCode(authorizationCode){
-        const session = new HTTPSession({baseURL: this.baseURL});
-        session.post({
+    async introspectToken(accessToken){
+        const session = new HTTPSession({baseURL: this.serverURL});
+        response = await session.get({
+            url: "/oauth2/token/introspect", 
+            headers: {
+                "Authorization": `Bearer ${accessToken}`
+            }
+        });
+        return response.json();
+    }
+
+    async getTokenFromCode(authorizationCode){
+        const session = new HTTPSession({baseURL: this.serverURL});
+        const response = await session.post({
             url: "/oauth2/token", 
             json: {
                 grant_type: "authorization_code",
@@ -75,9 +86,14 @@ export default class OctoAuthClient{
                 client_id: this.clientId,
                 redirect_uri: this.redirectURI
             }
-        })
-        .then(response=>{
-            console.log(response.json());
         });
+        return response.json().access_token;
+    }
+
+    async getAccessToken(){
+        const authorizationCode = this.getAuthorizationCode();
+        const accessToken = await this.getTokenFromCode(authorizationCode);
+        const tokenData = await this.introspectToken(accessToken);
+        return accessToken;
     }
 }
