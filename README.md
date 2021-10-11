@@ -29,6 +29,11 @@ const authorizationCode = octo.getAuthorizationCode();
 let accessToken = octo.getAccessToken(authorizationCode);
 ```
 
+## How it works ?
+
+![pkce-flow-for-public-client.png](docs/images/pkce-flow-for-public-client.png)
+*Illustration: implementation of pkce flow for public client*
+
 ## Sources
 
 - [proof key for code exchange by oauth public clients (rfc7636)](https://datatracker.ietf.org/doc/html/rfc7636)
