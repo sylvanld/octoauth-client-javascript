@@ -8,6 +8,12 @@ Client library for OctoAuth identity server...
 npm install --save octoauth-client
 ```
 
+
+## Description
+
+![pkce-flow-for-public-client.png](docs/images/pkce-flow-for-public-client.png)
+*Illustration: implementation of pkce flow for public client*
+
 ## Usage
 
 Instanciate OctoAuth client.
@@ -23,16 +29,32 @@ const octo = new OctoAuthClient({
 })
 ```
 
-Get token using authorization code flow.
+Redirect user to authorization server's /authorize view
 ```javascript
-const authorizationCode = octo.getAuthorizationCode();
-let accessToken = octo.getAccessToken(authorizationCode);
+octo.redirectToAuthorization();
 ```
 
-## How it works ?
+Handle authorization response (will redirect to authorization if no response is found)
+```javascript
+const authorizationCode = octo.getAuthorizationCode()
+octo.getTokenGrantFromCode(authorizationCode)
+    .then(()=>console.log("token grant has been loaded"))
+    .error(()=>console.log("failed to get tokenGrant"));
+```
 
-![pkce-flow-for-public-client.png](docs/images/pkce-flow-for-public-client.png)
-*Illustration: implementation of pkce flow for public client*
+Reload authorization from stored `refresh_token`
+```javascript
+octo.reloadAuthorization()
+    .then(()=>console.log("authorization reloaded"))
+    .error(()=>console.log("no suitable authorization stored"));
+```
+
+Register a function notified on token change
+```javascript
+octo.accessToken.addObserver(accessToken=>{
+    console.log("new access token value", accessToken);
+})
+```
 
 ## Sources
 
