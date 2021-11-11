@@ -1,234 +1,219 @@
-import axios from 'axios'
-import { Observable } from './observable'
-import { LocalStorage } from './storage'
-import { generateCodeChallenge, generateCodeVerifier, randomString } from './security'
+import axios from 'axios';
+import ClientConfig from "./config";
+import LocalStorage from './storage';
+import { generateCodeChallenge, generateRandomString } from './security';
 
 
-const CODE_VERIFIER_KEY = "codeVerifier";
-const REFRESH_TOKEN_KEY = "refreshToken";
-const SAVED_STATE_KEY = "savedState";
-
-
-function parseQueryParams() {
-    const queryString = window.location.search.substr(1);
-
-    // parse queryString as an object
+/**
+ * Parse a query string in the format user=toto&value=titi
+ * @returns \{paramA, paramB, ...}
+ */
+function parseQueryString(queryString) {
     const params = {}
     queryString.split("&").map(item => {
         const [key, value] = item.split('=');
         params[key] = value;
     });
-
-    // remove response params from URL
-    window.history.pushState("authorized", "Authorized", window.location.pathname);
     return (Object.keys(params).length > 0) ? params : null;
 }
 
-function objectToFormData(obj){
-    const formData = new FormData();
-    Object.keys(obj).forEach(key=>formData.append(key, obj[key]));
-    return formData;
+
+function axiosResponseHandler(response) {
+    return response.data;
+}
+
+function axiosExceptionHandler(error) {
+    return Promise.reject(error);
 }
 
 
-/**
- * OctoAuth client that can be used to perform Oauth2 flow as a public client.
- */
-export default class OctoAuthClient {
+class OctoAuthBaseClient {
     constructor({ clientId, redirectURI, scopes, serverURL }) {
-        this.clientId = clientId;
-        this.redirectURI = redirectURI;
-        this.scopes = (!scopes) ? [] : scopes;
-        this.serverURL = serverURL;
-
-        this.accessToken = new Observable();
-        this.isAuthorized = new Observable();
-
-        this.session = axios.create({ baseURL: serverURL });
+        this.config = new ClientConfig({ clientId, redirectURI, scopes, serverURL });
         this.storage = new LocalStorage();
+        this.session = axios.create({ baseURL: serverURL });
+        this.session.interceptors.response.use(axiosResponseHandler, axiosExceptionHandler);
     }
 
     /**
-     * Either load code verifier from storage or generate a new one
+     * Redirect user to authorization server's consent screen to retrieve
+     * an authorization code with proper scopes.
      */
-    getCodeVerifier() {
-        let codeVerifier = this.storage.get(CODE_VERIFIER_KEY);
-        if (!codeVerifier) {
-            codeVerifier = generateCodeVerifier();
-            this.storage.set(CODE_VERIFIER_KEY, codeVerifier);
-        }
-        return codeVerifier;
-    }
+    authorize() {
+        console.log("Redirect to authorization server consent screen.");
+        const codeVerifier = generateRandomString(64);
+        const state = generateRandomString(25);
 
-    /**
-     * Parse response from authorization server in URL
-     */
-    parseAuthorizationResponse() {
-        console.log("parseAuthorizationResponse");
-        const queryParams = parseQueryParams();
+        // save state that will be checked after redirection
+        this.storage.storeState(state);
+        this.storage.storeCodeVerifier(codeVerifier);
 
-        const savedState = this.storage.get(SAVED_STATE_KEY);
-        this.storage.del(SAVED_STATE_KEY);
-
-        // ensure state matches saved state to accept authorization code
-        if (savedState && queryParams && queryParams.state != savedState) {
-            console.log("Saved state does not matches returned state...");
-            return null;
-        }
-
-        console.log('parsed', queryParams);
-
-        return queryParams;
-    }
-
-    /**
-     * Redirect to authorization server's /authorize view
-     */
-    redirectToAuthorization() {
-        console.log("redirectToAuthorization");
-        const codeVerifier = this.getCodeVerifier();
-        const state = randomString(50);
-
-        this.storage.set(SAVED_STATE_KEY, state);
-
+        // generate code challenge, then redirect to authorization server consent screen with PKCE
         generateCodeChallenge(codeVerifier)
             .then(codeChallenge => {
-                // once code challenge is generated, redirect to 
-                window.location.href = this.serverURL + "/authorize?"
+                window.location.href = this.config.serverURL + "/authorize?"
                     + `&response_type=code`
                     + `&state=${state}`
-                    + `&client_id=${this.clientId}`
-                    + `&redirect_uri=${this.redirectURI}`
-                    + `&scope=${this.scopes.join(',')}`
+                    + `&client_id=${this.config.clientId}`
+                    + `&redirect_uri=${this.config.redirectURI}`
+                    + `&scope=${this.config.scope}`
                     + `&code_challenge=${codeChallenge}`
                     + `&code_challenge_method=S256`
             })
     }
 
     /**
-     * Returns information contained in a token or reject an error if token is invalid/expired.
+     * Handle authorization response from URL query or hash.
+     * 
+     * If using implicit flow, directly set accessToken.
+     * 
+     * If using authorization code flow, parse code, and make access token request.
      */
-    introspectToken(accessToken) {
-        console.log("introspectToken");
-        return new Promise((resolve, reject) => {
-            this.session.get("/oauth2/token/introspect", { headers: { 'Authorization': `Bearer ${accessToken}` } })
-                .then(response => {
-                    if (response.status == 403) {
-                        reject("Invalid or expired access token");
-                        return;
-                    }
-                    resolve(response.data);
-                })
-        })
-    }
-
-    /**
-     * Either parse code from URL or redirect to /authorize
-     */
-    getAuthorizationCode() {
-        console.log("getAuthorizationCode");
-        const params = this.parseAuthorizationResponse();
-        if (!params || !params.code) {
-            this.redirectToAuthorization();
-        }
-        return params.code;
-    }
-
-    /**
-     * Configure session to use access token, store refresh, and set timeout to update token.
-     */
-    setTokenGrant({ access_token, refresh_token, token_type, expires_in }) {
-        console.log("setTokenGrant", { access_token, refresh_token, token_type, expires_in });
-
-        if (!access_token) {
-            this.isAuthorized.next(false);
-        }
-
-        if (token_type.toLowerCase() == "bearer") {
-            this.session.defaults.headers.common['Authorization'] = `${token_type} ${access_token}`;
-            this.accessToken.next(access_token);
-            this.isAuthorized.next(true);
+    async handleAuthorizationResponse(force) {
+        force = force ? true : false;
+        // parse authorization code response
+        if (window.location.search.includes("?")) {
+            let response = parseQueryString(window.location.search.substr(1));
+            if (response.code && response.state) {
+                console.log("Valid authorization code retrieved");
+                // check that returned state matches state passed in request
+                if (response.state != this.storage.loadState()) {
+                    throw Error("State in response does not match state passed in authorization request.");
+                }
+                //this.storage.clearState();
+                // 
+                const grant = await this.getTokenFromCode(response.code);
+                this.configureGrant(grant);
+            }
         } else {
-            throw Error("Unsupported token_type received");
+            console.log("No authorization response to handle");
+            if (force) this.authorize();
         }
-
-        // store refresh token
-        this.storage.set(REFRESH_TOKEN_KEY, refresh_token);
-
-        // refresh access token once it expires
-        console.log(`access token will be refreshed in ${expires_in} seconds`);
-        setTimeout(() => this.getTokenGrantFromRefresh(refresh_token), (expires_in - 10) * 1000);
     }
 
-    async getTokenGrantFromCode(authorizationCode) {
-        console.log("getTokenGrantFromCode", authorizationCode);
-        const response = await this.session.post(
-            "/api/oauth2/token",
-            objectToFormData({
-                grant_type: "authorization_code",
-                code: authorizationCode,
-                client_id: this.clientId,
-                redirect_uri: this.redirectURI,
-                code_verifier: this.storage.get(CODE_VERIFIER_KEY)
-            })
-        );
-
-        this.storage.del(CODE_VERIFIER_KEY)
-
-        if (response.status != 200) {
-            throw Error("An error occured retrieving token from authorization code");
+    /**
+     * Configure client session to use access token.
+     * 
+     * If a refresh token has been issued, schedule a function to refresh access token once it is expired.
+     */
+    configureGrant(grant) {
+        // store grant so it can be reloaded after browser is closed
+        this.storage.storeGrant(grant);
+        // configure session to use accessToken as authorization bearer
+        this.session.defaults.headers["Authorization"] = `Bearer ${grant.access_token}`;
+        // if a refresh token is provided, schedule refresh once access token is expired
+        if (grant.refresh_token) {
+            setTimeout(this.getTokenFromRefreshToken, grant.expires_in * 1000);
+        } else {
+            setTimeout(this.authorize, grant.expires_in * 1000);
         }
-
-        this.setTokenGrant(response.data);
-        return response.data;
     }
 
-    async getTokenGrantFromRefresh(refreshToken) {
-        console.log("getTokenGrantFromRefresh", refreshToken);
-        const response = await this.session.post(
-            "/api/oauth2/token",
-            objectToFormData({
-                grant_type: "refresh_token",
-                refresh_token: refreshToken,
-                client_id: this.clientId,
-                redirect_uri: this.redirectURI
-            })
-        );
+    /**
+     * Request a new token grant from authorization code.
+     * 
+     * @returns \{access_token, refresh_token, token_type, expires_in, scopes}
+     * @throw error if token request is denied or fails
+     */
+    async getTokenFromCode(authorizationCode) {
+        const form = new FormData();
+        form.append("grant_type", "authorization_code");
+        form.append("code", authorizationCode);
+        form.append("client_id", this.config.clientId);
+        form.append("redirect_uri", this.config.redirectURI);
+        form.append("code_verifier", this.storage.loadCodeVerifier());
 
-        if (response.status != 200) {
-            throw Error("An error occured retrieving token from authorization code");
-        }
-        return response.data;
+        const tokenGrant = await this.session.post("/api/oauth2/token", form);
+
+        // clear code from URL
+        window.history.pushState("authenticated", "authenticated", window.location.pathname);
+
+        return tokenGrant;
     }
 
-    async reloadAuthorization() {
-        console.log("reloadAuthorization");
-        let refreshToken = this.storage.get(REFRESH_TOKEN_KEY);
-        if (!refreshToken) {
-            this.isAuthorized.next(false);
+    /**
+     * Request a new token grant using a valid refresh token.
+     * 
+     * @returns \{access_token, refresh_token, token_type, expires_in, scopes}
+     * @throw error if token request is denied or fails
+     */
+    async getTokenFromRefreshToken(refreshToken) {
+        const form = new FormData();
+        form.append("grant_type", "refresh_token");
+        form.append("refresh_token", refreshToken);
+        form.append("client_id", this.config.clientId);
+        form.append("redirect_uri", this.config.redirectURI);
+
+        const tokenGrant = await this.session.post("/api/oauth2/token", form);
+        return tokenGrant;
+    }
+
+    /**
+     * Configure session with a valid access token retrieved from storage.
+     * If token is expired and a refresh token exists, use refresh token to issue a new access token.
+     * 
+     * @returns a boolean that indicates whether accessToken has been loaded.
+     */
+    async reloadGrant() {
+        console.log("Reloading grant from storage.");
+        let grant = this.storage.loadGrant();
+        if (!grant) {
+            console.log("No grant loaded.");
             return false;
         }
-        const tokenGrant = await this.getTokenGrantFromRefresh(refreshToken);
-        this.setTokenGrant(tokenGrant);
-        return false;
-    }
 
-    revokeAuthorization() {
-        this.storage.del(REFRESH_TOKEN_KEY);
-    }
-
-    /**
-     * Bellow are defined methods that are not related to Oauth2 protocol
-     */
-
-    /**
-     * Get current user account (identified by access token)
-     */
-    async getCurrentUserAccount() {
-        const response = await this.session.get("/api/accounts/whoami");
-        if (response.status != 200) {
-            throw Error("An unhandled error occured while getting current user account.")
+        console.log('Old grant found', grant);
+        if (grant.expires_in > 0) {
+            console.log("Valid grant reloaded");
+            this.configureGrant(grant);
+            return true;
+        } else {
+            if (!grant.refresh_token) {
+                console.log("No grant loaded. Refresh token is expired and no refresh token exists.");
+                return false;
+            }
+            // if token is expired but refresh exists, use refresh to issue a new access token
+            grant = await this.getTokenFromRefreshToken(grant.refresh_token);
+            this.configureGrant(grant);
+            return true;
         }
-        return response.data;
     }
 }
+
+class OctoAuthClient extends OctoAuthBaseClient {
+    async whoami() {
+        return await this.session.get(`/api/accounts/whoami`);
+    }
+    async getApplicationDetails(applicationUID) {
+        return await this.session.get(`/api/oauth2/applications/${applicationUID}`);
+    }
+    async searchApplications() {
+        return await this.session.get("/api/oauth2/applications");
+    }
+    async createApplication(application) {
+        return await this.session.post("/api/oauth2/applications", application);
+    }
+    async updateApplication(applicationUID, applicationData) {
+        return await this.session.put(`/api/oauth2/applications/${applicationUID}`, applicationData);
+    }
+    async deleteApplication(applicationUID) {
+        return await this.session.delete(`/api/oauth2/applications/${applicationUID}`);
+    }
+    async getAuthorizedRedirectURIs(applicationUID) {
+        return await this.session.get(`/api/oauth2/applications/${applicationUID}/redirect_uris`);
+    }
+    async updateAuthorizedRedirectURI(applicationUID, redirectUid, redirectURI) {
+        return await this.session.put(`/api/oauth2/applications/${applicationUID}/redirect_uris/${redirectUid}`, { redirect_uri: redirectURI });
+    }
+    async addAuthorizedRedirectURI(applicationUID, redirectURI) {
+        return await this.session.post(`/api/oauth2/applications/${applicationUID}/redirect_uris`, { redirect_uri: redirectURI });
+    }
+    async getSessions() {
+        return await this.session.get("/api/sessions");
+    }
+    async revokeSession(sessionUID) {
+        return await this.session.post(`/api/sessions/${sessionUID}/revoke`);
+    }
+}
+
+export default OctoAuthClient;

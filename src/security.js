@@ -14,7 +14,7 @@ function getCrypto(){
     return crypto;
 }
 
-export function randomString(length){
+export function generateRandomString(length){
     // create a 32-octet sequence of numbers of given size.
     const array = new Uint32Array(length);
     getCrypto().getRandomValues(array);
@@ -22,10 +22,9 @@ export function randomString(length){
     return Array.from(array, n=>UNRESERVED_CHARACTERS[n % UNRESERVED_CHARACTERS.length]).join("");
 }
 
-export function generateCodeVerifier(){
-    return randomString(64);
-}
-
+/**
+ * Hash a string using SHA256 hashing algorithm
+ */
 async function sha256(plainText){
     // encode as UTF-8
     const msgBuffer = new TextEncoder().encode(plainText);                    
@@ -41,6 +40,10 @@ async function sha256(plainText){
     return hashHex;
 }
 
+/**
+ * Generate code challenge from code verifier.\
+ * challenge is computed as: `base64(sha256(codeVerifier))`
+ */
 export async function generateCodeChallenge(codeVerifier){
     const hash = await sha256(codeVerifier);
     return btoa(hash);
