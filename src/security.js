@@ -23,7 +23,7 @@ export function randomString(length){
 }
 
 export function generateCodeVerifier(){
-    return randomString(length);
+    return randomString(64);
 }
 
 async function sha256(plainText){

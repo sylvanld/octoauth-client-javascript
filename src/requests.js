@@ -15,12 +15,13 @@ function mergeHeaders(headers1, headers2){
             headers[key] = headers2[key];
         })
     }
-    return Object.keys(headers).map(key=>({name: key, value: headers[key]}));
+    return headers;
 }
 
 class HTTPResponse{
     constructor(xhr){
         this.xhr = xhr;
+        this.status = xhr.status;
     }
 
     json(){
@@ -32,6 +33,10 @@ export class HTTPSession{
     constructor({baseURL, headers}){
         this.headers = (!headers) ? {} : headers;
         this.baseURL = (!baseURL) ? null : baseURL;
+    }
+
+    updateHeaders(headers){
+        this.headers = mergeHeaders(this.headers, headers);
     }
 
     request({method, url, headers, json, data, text}){
@@ -47,9 +52,10 @@ export class HTTPSession{
             xhr.open(method, url);
 
             // set request default headers
-            for(let header of mergeHeaders(this.headers, headers)){
-                xhr.setRequestHeader(header.name, header.value);
-            }
+            const _headers = mergeHeaders(this.headers, headers);
+            Object.keys(_headers).map(
+                header=>xhr.setRequestHeader(header, _headers[header])
+            )
 
             // build xhr body
             let body = null;
