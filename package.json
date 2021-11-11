@@ -16,5 +16,8 @@
   "homepage": "https://gitlab.com/octoauth/libraries/javascript-client#readme",
   "devDependencies": {
     "eslint": "^7.32.0"
+  },
+  "dependencies": {
+    "axios": "^0.24.0"
   }
 }
