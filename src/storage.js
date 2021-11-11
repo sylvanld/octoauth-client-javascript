@@ -3,15 +3,11 @@
  */
 export class LocalStorage{
     get(key){
-        const value = localStorage.getItem(key);
-        if(!value){
-            return null;
-        }
-        return value;
+        return localStorage.getItem(key);
     }
 
     set(key, value){
-        localStorage.setItem(key, value)
+        localStorage.setItem(key, value);
     }
 
     del(key){
