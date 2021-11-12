@@ -1,6 +1,7 @@
 import axios from 'axios';
 import ClientConfig from "./config";
 import LocalStorage from './storage';
+import Observable from './observable';
 import { generateCodeChallenge, generateRandomString } from './security';
 
 
@@ -33,6 +34,7 @@ class OctoAuthBaseClient {
         this.storage = new LocalStorage();
         this.session = axios.create({ baseURL: serverURL });
         this.session.interceptors.response.use(axiosResponseHandler, axiosExceptionHandler);
+        this.isAuthorized = new Observable();
     }
 
     /**
@@ -159,6 +161,7 @@ class OctoAuthBaseClient {
         let grant = this.storage.loadGrant();
         if (!grant) {
             console.log("No grant loaded.");
+            this.isAuthorized.next(false);
             return false;
         }
 
@@ -166,6 +169,7 @@ class OctoAuthBaseClient {
         if (grant.expires_in > 0) {
             console.log("Valid grant reloaded");
             this.configureGrant(grant);
+            this.isAuthorized.next(true);
             return true;
         } else {
             if (!grant.refresh_token) {
@@ -175,8 +179,18 @@ class OctoAuthBaseClient {
             // if token is expired but refresh exists, use refresh to issue a new access token
             grant = await this.getTokenFromRefreshToken(grant.refresh_token);
             this.configureGrant(grant);
+            this.isAuthorized.next(true);
             return true;
         }
+    }
+
+    /**
+     * Revoke grant from storage and unconfigure session headers
+     */
+    revokeGrant(){
+        this.storage.clearGrant();
+        this.isAuthorized.next(false);
+        delete this.session.defaults.headers["Authorization"];
     }
 }
 

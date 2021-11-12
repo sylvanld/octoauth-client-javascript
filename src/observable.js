@@ -1,4 +1,4 @@
-export class Observable{
+export default class Observable{
     constructor(initialValue){
         this.value = initialValue;
         this.observers = [];
@@ -40,17 +40,15 @@ export class Observable{
      * Call all observers with this observable's value
      */
     notifyObservers(){
-        console.log('notifyObservers', this.value);
         for(let k=this.observers.length-1; k>=0; k--){
             this.observers[k](this.value);
         }
     }
     
     /**
-     * Register a function that will notified when observable value change
+     * Register a function that will notified when observable value change.
      */
     addObserver(observer){
-        console.log('observerAdded', observer);
         this.observers.push(observer);
         if(this.value !== undefined){
             observer(this.value);
